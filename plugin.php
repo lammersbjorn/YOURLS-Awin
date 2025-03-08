@@ -4,6 +4,7 @@ Plugin Name: Awin Affiliate
 Description: Add your Awin affiliate parameters to URLs from configured merchants
 Version: 2.3
 Author: Bjorn Lammers
+Author URI: https://github.com/lammersbjorn/YOURLS-Awin
 */
 
 // Prevent direct access to this file
@@ -452,7 +453,7 @@ class AwinAffiliatePlugin
     <meta name="robots" content="noindex, nofollow">
     <meta http-equiv="refresh" content="0; url={$escapedUrl}">
     <style>
-        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; 
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
                line-height: 1.5; padding: 2rem; text-align: center; }
         .container { max-width: 600px; margin: 0 auto; }
         .spinner { width: 40px; height: 40px; margin: 20px auto;
