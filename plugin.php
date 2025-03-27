@@ -1,10 +1,12 @@
 <?php
-/*
-Plugin Name: Awin Affiliate
-Description: Add your Awin affiliate parameters to URLs from configured merchants
-Version: 2.3
-Author: Bjorn Lammers
-Author URI: https://github.com/lammersbjorn/YOURLS-Awin
+/**
+  * Plugin Name: Awin Affiliate
+  * Description: Add your Awin affiliate parameters to URLs from configured merchants
+  * Version: 2.3
+  * Author: Bjorn Lammers
+  * Author URI: https://github.com/lammersbjorn/YOURLS-Awin
+  * License: BSD 3-Clause
+  * License URI: https://opensource.org/licenses/BSD-3-Clause
 */
 
 // Prevent direct access to this file
