@@ -7,6 +7,10 @@
   * Author URI: https://github.com/lammersbjorn/YOURLS-Awin
   * License: BSD 3-Clause
   * License URI: https://opensource.org/licenses/BSD-3-Clause
+  * Requires at least: YOURLS 1.7.3
+  * Tested up to: YOURLS 1.10.2
+  * Requires PHP: 7.4
+  * Tested up to PHP: 8.5
 */
 
 // Prevent direct access to this file
@@ -33,8 +37,10 @@ class AwinAffiliatePlugin
         // Process form submissions
         yourls_add_action('admin_init', [$this, 'processFormSubmission']);
 
-        // URL processing hook
-        yourls_add_action('pre_redirect', [$this, 'processUrl']);
+        // URL processing hook. `pre_redirect` is a filter — YOURLS calls it
+        // with the long URL as the first argument (not an args array), so we
+        // register the callback as a single-argument receiver here.
+        yourls_add_action('pre_redirect', [$this, 'processUrl'], 10);
     }
 
     /**
@@ -43,34 +49,45 @@ class AwinAffiliatePlugin
     public function init(): void
     {
         // Load settings from YOURLS options
-        $this->settings = yourls_get_option(self::OPTION_NAME);
+        $stored = yourls_get_option(self::OPTION_NAME);
 
-        if ($this->settings === false) {
+        if (!is_array($stored)) {
             // Default settings
             $this->settings = [
-                'awinaffid' => '',
+                'awinaffid'        => '',
                 'default_campaign' => '',
                 'default_clickref' => '',
-                'merchants' => []
-            ];
-
-            // Add default merchants
-            $this->settings['merchants'] = [
-                'coolblue' => [
-                    'name' => 'Coolblue',
-                    'awinmid' => '',
-                    'domains' => [
-                        'coolblue.nl',
-                        'coolblue.be',
-                        'coolblue.de',
-                        'coolblue.fr'
-                    ],
-                    'enabled' => true
+                'merchants'        => [
+                    'coolblue' => [
+                        'name'    => 'Coolblue',
+                        'awinmid' => '',
+                        'domains' => [
+                            'coolblue.nl',
+                            'coolblue.be',
+                            'coolblue.de',
+                            'coolblue.fr'
+                        ],
+                        'enabled' => true
+                    ]
                 ]
             ];
 
             yourls_add_option(self::OPTION_NAME, $this->settings);
+            return;
         }
+
+        // Existing install — make sure the expected top-level keys are present
+        // so the rest of the plugin can rely on them without `??` everywhere.
+        $stored += [
+            'awinaffid'        => '',
+            'default_campaign' => '',
+            'default_clickref' => '',
+            'merchants'        => [],
+        ];
+        if (!is_array($stored['merchants'])) {
+            $stored['merchants'] = [];
+        }
+        $this->settings = $stored;
     }
 
     /**
@@ -88,69 +105,86 @@ class AwinAffiliatePlugin
     {
         if (!yourls_is_admin()) die('Access denied');
 
-        $nonce = yourls_create_nonce('awin_affiliate_settings');
+        $nonce     = yourls_create_nonce('awin_affiliate_settings');
+        $awinaffid = (string) ($this->settings['awinaffid'] ?? '');
+        $merchants = is_array($this->settings['merchants'] ?? null) ? $this->settings['merchants'] : [];
 ?>
+        <div class="awin-page">
         <h2>Awin Affiliate Settings</h2>
 
         <form method="post">
-            <input type="hidden" name="nonce" value="<?php echo $nonce; ?>">
+            <input type="hidden" name="nonce" value="<?php echo yourls_esc_attr($nonce); ?>">
             <input type="hidden" name="action" value="update_awin_settings">
 
             <h3>Global Settings</h3>
             <div class="settings-group">
                 <p>
                     <label for="awinaffid">Awin Affiliate ID (required):</label><br>
-                    <input type="text" id="awinaffid" name="awinaffid" value="<?php echo htmlspecialchars($this->settings['awinaffid']); ?>" class="text" required>
+                    <input type="text" id="awinaffid" name="awinaffid" value="<?php echo yourls_esc_attr($awinaffid); ?>" class="text" required>
                 </p>
             </div>
 
             <h3>Merchants</h3>
             <div class="merchants-container">
-                <?php foreach ($this->settings['merchants'] as $id => $merchant): ?>
+                <?php foreach ($merchants as $id => $merchant): ?>
+                    <?php
+                        $idAttr   = yourls_esc_attr((string) $id);
+                        $name     = (string) ($merchant['name']     ?? $id);
+                        $awinmid  = (string) ($merchant['awinmid']  ?? '');
+                        $campaign = (string) ($merchant['campaign'] ?? '');
+                        $clickref = (string) ($merchant['clickref'] ?? '');
+                        $enabled  = !empty($merchant['enabled']);
+                        $domains  = is_array($merchant['domains'] ?? null)
+                            ? array_filter($merchant['domains'], 'is_string')
+                            : [];
+                    ?>
                     <div class="merchant-settings">
                         <div class="merchant-header">
-                            <h4><?php echo htmlspecialchars($merchant['name']); ?></h4>
+                            <h4><?php echo yourls_esc_html($name); ?></h4>
                             <label class="merchant-toggle">
-                                <input type="checkbox" name="merchant_enabled[<?php echo $id; ?>]" value="1"
-                                    <?php echo $merchant['enabled'] ? 'checked' : ''; ?>>
+                                <input type="checkbox" name="merchant_enabled[<?php echo $idAttr; ?>]" value="1"
+                                    <?php echo $enabled ? 'checked' : ''; ?>>
                                 Enable
                             </label>
                         </div>
                         <div class="merchant-content">
                             <div class="merchant-row">
                                 <div class="merchant-col">
-                                    <label for="merchant_awinmid_<?php echo $id; ?>">Awin Merchant ID:</label>
-                                    <input type="text" id="merchant_awinmid_<?php echo $id; ?>"
-                                        name="merchant_awinmid[<?php echo $id; ?>]"
-                                        value="<?php echo htmlspecialchars($merchant['awinmid']); ?>"
+                                    <label for="merchant_awinmid_<?php echo $idAttr; ?>">Awin Merchant ID:</label>
+                                    <input type="text" id="merchant_awinmid_<?php echo $idAttr; ?>"
+                                        name="merchant_awinmid[<?php echo $idAttr; ?>]"
+                                        value="<?php echo yourls_esc_attr($awinmid); ?>"
                                         class="text">
                                 </div>
                                 <div class="merchant-col">
-                                    <label for="merchant_campaign_<?php echo $id; ?>">Default Campaign:</label>
-                                    <input type="text" id="merchant_campaign_<?php echo $id; ?>"
-                                        name="merchant_campaign[<?php echo $id; ?>]"
-                                        value="<?php echo htmlspecialchars($merchant['campaign'] ?? ''); ?>"
+                                    <label for="merchant_campaign_<?php echo $idAttr; ?>">Default Campaign:</label>
+                                    <input type="text" id="merchant_campaign_<?php echo $idAttr; ?>"
+                                        name="merchant_campaign[<?php echo $idAttr; ?>]"
+                                        value="<?php echo yourls_esc_attr($campaign); ?>"
                                         class="text">
                                 </div>
                                 <div class="merchant-col">
-                                    <label for="merchant_clickref_<?php echo $id; ?>">Default Clickref:</label>
-                                    <input type="text" id="merchant_clickref_<?php echo $id; ?>"
-                                        name="merchant_clickref[<?php echo $id; ?>]"
-                                        value="<?php echo htmlspecialchars($merchant['clickref'] ?? ''); ?>"
+                                    <label for="merchant_clickref_<?php echo $idAttr; ?>">Default Clickref:</label>
+                                    <input type="text" id="merchant_clickref_<?php echo $idAttr; ?>"
+                                        name="merchant_clickref[<?php echo $idAttr; ?>]"
+                                        value="<?php echo yourls_esc_attr($clickref); ?>"
                                         class="text">
                                 </div>
                             </div>
                             <div class="merchant-row">
                                 <div class="merchant-col full">
-                                    <label>Domains (one per line):</label>
-                                    <textarea name="merchant_domains[<?php echo $id; ?>]" rows="3" class="text"><?php
-                                                                                                                echo htmlspecialchars(implode("\n", $merchant['domains']));
-                                                                                                                ?></textarea>
+                                    <label for="merchant_domains_<?php echo $idAttr; ?>">Domains (one per line):</label>
+                                    <textarea id="merchant_domains_<?php echo $idAttr; ?>" name="merchant_domains[<?php echo $idAttr; ?>]" rows="3" class="text"><?php
+                                        echo yourls_esc_html(implode("\n", $domains));
+                                    ?></textarea>
                                 </div>
                             </div>
                         </div>
                     </div>
                 <?php endforeach; ?>
+                <?php if (empty($merchants)): ?>
+                    <p>No merchants configured yet — fill in the form below to add one.</p>
+                <?php endif; ?>
             </div>
 
             <h3>Add New Merchant</h3>
@@ -183,82 +217,113 @@ class AwinAffiliatePlugin
                 </div>
             </div>
 
-            <p><input type="submit" value="Save Settings" class="button primary"></p>
+            <p><input type="submit" value="Save Settings" class="button button-primary"></p>
         </form>
+        </div><!-- .awin-page -->
 
         <style>
-            .settings-group {
+            /* All selectors are scoped to .awin-page so the plugin styles
+               don't bleed into the surrounding YOURLS / Sleeky chrome. Colors
+               use rgba()/inherit so the form looks right in vanilla YOURLS
+               and in Sleeky's light + dark themes. */
+            .awin-page .settings-group {
                 margin: 20px 0;
                 padding: 15px;
                 border: 1px solid rgba(128, 128, 128, 0.2);
                 border-radius: 5px;
+                background: transparent;
             }
 
-            .merchants-container {
+            .awin-page .merchants-container {
                 margin: 20px 0;
                 display: flex;
                 flex-direction: column;
                 gap: 15px;
             }
 
-            .merchant-settings {
+            .awin-page .merchant-settings {
                 border: 1px solid rgba(128, 128, 128, 0.2);
                 border-radius: 5px;
+                background: transparent;
             }
 
-            .merchant-header {
+            .awin-page .merchant-header {
                 display: flex;
                 justify-content: space-between;
                 align-items: center;
                 padding: 10px 15px;
                 border-bottom: 1px solid rgba(128, 128, 128, 0.2);
+                background-color: rgba(128, 128, 128, 0.05);
             }
 
-            .merchant-header h4 {
+            .awin-page .merchant-header h4 {
                 margin: 0;
+                font-size: 1em;
             }
 
-            .merchant-content {
+            .awin-page .merchant-content {
                 padding: 15px;
             }
 
-            .merchant-row {
+            .awin-page .merchant-row {
                 display: flex;
                 gap: 15px;
                 margin-bottom: 15px;
             }
 
-            .merchant-row:last-child {
+            .awin-page .merchant-row:last-child {
                 margin-bottom: 0;
             }
 
-            .merchant-col {
+            .awin-page .merchant-col {
                 flex: 1;
+                min-width: 0;
             }
 
-            .merchant-col.full {
+            .awin-page .merchant-col.full {
                 flex: 0 0 100%;
             }
 
-            .merchant-col label {
+            .awin-page .merchant-col label {
                 display: block;
                 margin-bottom: 5px;
+                font-weight: 600;
             }
 
-            input.text,
-            textarea.text {
+            .awin-page input.text,
+            .awin-page textarea.text {
                 width: 100%;
-                padding: 5px;
-                border: 1px solid rgba(128, 128, 128, 0.2);
+                padding: 8px;
+                border: 1px solid rgba(128, 128, 128, 0.3);
                 border-radius: 3px;
                 background: transparent;
                 color: inherit;
+                box-sizing: border-box;
+                font: inherit;
             }
 
-            .merchant-toggle {
+            .awin-page input.text:focus,
+            .awin-page textarea.text:focus {
+                outline: 2px solid rgba(0, 128, 255, 0.4);
+                outline-offset: 1px;
+            }
+
+            .awin-page input:required:invalid {
+                border-color: #f44336;
+            }
+
+            .awin-page .merchant-toggle {
                 display: flex;
                 align-items: center;
                 gap: 5px;
+                font-weight: normal;
+            }
+
+            @media (max-width: 768px) {
+                .awin-page .merchant-row {
+                    flex-direction: column;
+                    gap: 10px;
+                }
             }
         </style>
 <?php
@@ -273,34 +338,49 @@ class AwinAffiliatePlugin
             return;
         }
 
-        // Verify nonce
+        // Only react to admin POSTs.
+        if (!yourls_is_admin()) {
+            return;
+        }
+
+        // Verify nonce. Pulls the value from $_REQUEST['nonce'] when called
+        // with only the action name; dies on failure (default behavior).
         yourls_verify_nonce('awin_affiliate_settings');
 
-        // Update global settings
-        $this->settings['awinaffid'] = $_POST['awinaffid'];
+        // Update global settings. Cast every $_POST read to string so
+        // unexpected payload shapes (arrays, missing keys) do not trip
+        // PHP 8.1+ deprecations or 8.4+ type errors.
+        $this->settings['awinaffid'] = trim((string) ($_POST['awinaffid'] ?? ''));
 
         // Update existing merchants
         foreach ($this->settings['merchants'] as $id => &$merchant) {
-            $merchant['enabled'] = isset($_POST['merchant_enabled'][$id]);
-            $merchant['awinmid'] = $_POST['merchant_awinmid'][$id];
-            $merchant['campaign'] = $_POST['merchant_campaign'][$id];
-            $merchant['clickref'] = $_POST['merchant_clickref'][$id];
-            $merchant['domains'] = array_filter(array_map('trim', explode("\n", $_POST['merchant_domains'][$id])));
+            $merchant['enabled']  = isset($_POST['merchant_enabled'][$id]);
+            $merchant['awinmid']  = trim((string) ($_POST['merchant_awinmid'][$id]  ?? ''));
+            $merchant['campaign'] = trim((string) ($_POST['merchant_campaign'][$id] ?? ''));
+            $merchant['clickref'] = trim((string) ($_POST['merchant_clickref'][$id] ?? ''));
+            $merchant['domains']  = $this->normaliseDomainList(
+                (string) ($_POST['merchant_domains'][$id] ?? '')
+            );
         }
+        unset($merchant); // break the foreach reference — long-standing PHP gotcha
 
         // Add new merchant if provided
-        if (!empty($_POST['new_merchant_name']) && !empty($_POST['new_merchant_awinmid'])) {
-            $id = yourls_sanitize_title($_POST['new_merchant_name']);
-            $domains = array_filter(array_map('trim', explode("\n", $_POST['new_merchant_domains'])));
-
-            $this->settings['merchants'][$id] = [
-                'name' => $_POST['new_merchant_name'],
-                'awinmid' => $_POST['new_merchant_awinmid'],
-                'campaign' => $_POST['new_merchant_campaign'],
-                'clickref' => $_POST['new_merchant_clickref'],
-                'domains' => $domains,
-                'enabled' => true
-            ];
+        $newName    = trim((string) ($_POST['new_merchant_name']    ?? ''));
+        $newAwinmid = trim((string) ($_POST['new_merchant_awinmid'] ?? ''));
+        if ($newName !== '' && $newAwinmid !== '') {
+            $id = yourls_sanitize_title($newName);
+            if ($id !== '' && !isset($this->settings['merchants'][$id])) {
+                $this->settings['merchants'][$id] = [
+                    'name'     => $newName,
+                    'awinmid'  => $newAwinmid,
+                    'campaign' => trim((string) ($_POST['new_merchant_campaign'] ?? '')),
+                    'clickref' => trim((string) ($_POST['new_merchant_clickref'] ?? '')),
+                    'domains'  => $this->normaliseDomainList(
+                        (string) ($_POST['new_merchant_domains'] ?? '')
+                    ),
+                    'enabled'  => true
+                ];
+            }
         }
 
         // Save settings
@@ -309,20 +389,49 @@ class AwinAffiliatePlugin
     }
 
     /**
-     * Process URL for redirection
-     * @param array $args Arguments from YOURLS
+     * Turn a textarea blob (one domain per line) into a clean,
+     * lower-cased, deduplicated list of domains.
      */
-    public function processUrl($args): void
+    private function normaliseDomainList(string $blob): array
+    {
+        $lines = preg_split('/\r\n|\r|\n/', $blob);
+        if (!is_array($lines)) {
+            return [];
+        }
+        $out = [];
+        foreach ($lines as $line) {
+            $line = strtolower(trim($line));
+            if ($line !== '' && !in_array($line, $out, true)) {
+                $out[] = $line;
+            }
+        }
+        return array_values($out);
+    }
+
+    /**
+     * Process URL for redirection. YOURLS' `pre_redirect` filter passes the
+     * destination URL as the first argument; earlier versions of this plugin
+     * incorrectly treated it as an array, which silently broke the redirect
+     * rewrite for everyone. Accept either form for safety.
+     *
+     * @param mixed $url URL string from YOURLS (or — for legacy callers —
+     *                   an array whose first element is the URL).
+     */
+    public function processUrl($url): void
     {
         try {
-            $url = $args[0] ?? '';
-            if (empty($url)) return;
+            if (is_array($url)) {
+                $url = $url[0] ?? '';
+            }
+            if (!is_string($url) || $url === '') {
+                return;
+            }
 
             $merchant = $this->findMatchingMerchant($url);
-            if ($merchant && $merchant['enabled']) {
+            if ($merchant && !empty($merchant['enabled'])) {
                 $this->handleRedirect($url, $merchant);
             }
-        } catch (Exception $e) {
+        } catch (Throwable $e) {
             error_log('Awin Affiliate Plugin Error: ' . $e->getMessage());
         }
     }
@@ -335,15 +444,31 @@ class AwinAffiliatePlugin
     private function findMatchingMerchant(string $url): ?array
     {
         $parsedUrl = parse_url($url);
-        if (!$parsedUrl || empty($parsedUrl['host'])) {
+        if (!is_array($parsedUrl) || empty($parsedUrl['host'])) {
             return null;
         }
 
-        $host = strtolower(preg_replace('/^www\./', '', $parsedUrl['host']));
+        $host = strtolower((string) $parsedUrl['host']);
+        // Strip a single leading "www." so "www.coolblue.nl" matches a stored
+        // "coolblue.nl" entry. preg_replace can return null on regex error,
+        // so coalesce back to $host to keep the rest of the function safe.
+        $stripped = preg_replace('/^www\./', '', $host);
+        $host = is_string($stripped) ? $stripped : $host;
 
-        foreach ($this->settings['merchants'] as $merchant) {
-            if (in_array($host, $merchant['domains'])) {
-                return $merchant;
+        $merchants = $this->settings['merchants'] ?? [];
+        if (!is_array($merchants)) {
+            return null;
+        }
+
+        foreach ($merchants as $merchant) {
+            $domains = $merchant['domains'] ?? [];
+            if (!is_array($domains)) {
+                continue;
+            }
+            foreach ($domains as $domain) {
+                if (is_string($domain) && strtolower($domain) === $host) {
+                    return $merchant;
+                }
             }
         }
 
@@ -356,39 +481,43 @@ class AwinAffiliatePlugin
     private function handleRedirect(string $url, array $merchant): void
     {
         $urlParts = parse_url($url);
+        if (!is_array($urlParts) || empty($urlParts['host'])) {
+            return; // malformed URL — let YOURLS' default redirect path run.
+        }
         $baseUrl = $this->buildBaseUrl($urlParts);
 
         // Get existing parameters
         $existingParams = [];
-        if (isset($urlParts['query'])) {
+        if (isset($urlParts['query']) && is_string($urlParts['query'])) {
             parse_str($urlParts['query'], $existingParams);
         }
 
-        // Build Awin parameters
+        // Build Awin parameters. Cast every value to string so urlencode()
+        // never sees a null (which is a deprecation warning in PHP 8.1+).
         $params = [
-            'awinmid' => $merchant['awinmid'],
-            'awinaffid' => $this->settings['awinaffid']
+            'awinmid'   => (string) ($merchant['awinmid'] ?? ''),
+            'awinaffid' => (string) ($this->settings['awinaffid'] ?? ''),
         ];
 
         // Add campaign if provided in URL or merchant settings
         if (isset($existingParams['campaign'])) {
-            $params['campaign'] = $existingParams['campaign'];
+            $params['campaign'] = (string) $existingParams['campaign'];
         } elseif (!empty($merchant['campaign'])) {
-            $params['campaign'] = $merchant['campaign'];
+            $params['campaign'] = (string) $merchant['campaign'];
         }
 
         // Add clickrefs
         if (isset($existingParams['clickref'])) {
-            $params['clickref'] = $existingParams['clickref'];
+            $params['clickref'] = (string) $existingParams['clickref'];
         } elseif (!empty($merchant['clickref'])) {
-            $params['clickref'] = $merchant['clickref'];
+            $params['clickref'] = (string) $merchant['clickref'];
         }
 
         // Add additional clickrefs if provided in URL
         for ($i = 2; $i <= self::CLICKREF_COUNT; $i++) {
             $key = "clickref{$i}";
             if (isset($existingParams[$key])) {
-                $params[$key] = $existingParams[$key];
+                $params[$key] = (string) $existingParams[$key];
             }
         }
 
@@ -482,4 +611,3 @@ HTML;
 
 // Initialize the plugin
 new AwinAffiliatePlugin();
-?>
