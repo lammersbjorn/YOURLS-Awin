@@ -8,7 +8,7 @@
   * License: BSD 3-Clause
   * License URI: https://opensource.org/licenses/BSD-3-Clause
   * Requires at least: YOURLS 1.7.3
-  * Tested up to: YOURLS 1.10.2
+  * Tested up to: YOURLS 1.10.3
   * Requires PHP: 7.4
   * Tested up to PHP: 8.5
 */
@@ -37,9 +37,8 @@ class AwinAffiliatePlugin
         // Process form submissions
         yourls_add_action('admin_init', [$this, 'processFormSubmission']);
 
-        // URL processing hook. `pre_redirect` is a filter — YOURLS calls it
-        // with the long URL as the first argument (not an args array), so we
-        // register the callback as a single-argument receiver here.
+        // URL processing hook. YOURLS' action plumbing passes the action
+        // arguments as one array; processUrl() also accepts direct URL strings.
         yourls_add_action('pre_redirect', [$this, 'processUrl'], 10);
     }
 
@@ -217,7 +216,7 @@ class AwinAffiliatePlugin
                 </div>
             </div>
 
-            <p><input type="submit" value="Save Settings" class="button button-primary"></p>
+            <p><input type="submit" value="Save Settings" class="button primary"></p>
         </form>
         </div><!-- .awin-page -->
 
@@ -409,19 +408,20 @@ class AwinAffiliatePlugin
     }
 
     /**
-     * Process URL for redirection. YOURLS' `pre_redirect` filter passes the
-     * destination URL as the first argument; earlier versions of this plugin
-     * incorrectly treated it as an array, which silently broke the redirect
-     * rewrite for everyone. Accept either form for safety.
+     * Process URL for redirection.
      *
-     * @param mixed $url URL string from YOURLS (or — for legacy callers —
-     *                   an array whose first element is the URL).
+     * YOURLS calls `pre_redirect` via `yourls_do_action('pre_redirect', $location, $code)`.
+     * Its action plumbing passes those arguments as one array by default. This
+     * callback also accepts direct URL strings from legacy/custom callers.
+     *
+     * @param mixed $location Redirect action args array or direct URL string.
      */
-    public function processUrl($url): void
+    public function processUrl($location): void
     {
         try {
-            if (is_array($url)) {
-                $url = $url[0] ?? '';
+            $url = $location;
+            if (is_array($location)) {
+                $url = $location[0] ?? '';
             }
             if (!is_string($url) || $url === '') {
                 return;
@@ -500,15 +500,17 @@ class AwinAffiliatePlugin
         ];
 
         // Add campaign if provided in URL or merchant settings
-        if (isset($existingParams['campaign'])) {
-            $params['campaign'] = (string) $existingParams['campaign'];
+        $campaign = $this->normaliseQueryParamValue($existingParams, 'campaign');
+        if ($campaign !== null) {
+            $params['campaign'] = $campaign;
         } elseif (!empty($merchant['campaign'])) {
             $params['campaign'] = (string) $merchant['campaign'];
         }
 
         // Add clickrefs
-        if (isset($existingParams['clickref'])) {
-            $params['clickref'] = (string) $existingParams['clickref'];
+        $clickref = $this->normaliseQueryParamValue($existingParams, 'clickref');
+        if ($clickref !== null) {
+            $params['clickref'] = $clickref;
         } elseif (!empty($merchant['clickref'])) {
             $params['clickref'] = (string) $merchant['clickref'];
         }
@@ -516,8 +518,9 @@ class AwinAffiliatePlugin
         // Add additional clickrefs if provided in URL
         for ($i = 2; $i <= self::CLICKREF_COUNT; $i++) {
             $key = "clickref{$i}";
-            if (isset($existingParams[$key])) {
-                $params[$key] = (string) $existingParams[$key];
+            $value = $this->normaliseQueryParamValue($existingParams, $key);
+            if ($value !== null) {
+                $params[$key] = $value;
             }
         }
 
@@ -536,6 +539,25 @@ class AwinAffiliatePlugin
         $path = $urlParts['path'] ?? '';
 
         return sprintf('%s://%s%s', $scheme, $host, $path);
+    }
+
+    /**
+     * Return safe scalar query value as string; ignore arrays/non-scalars.
+     * parse_str can produce nested arrays for repeated/bracketed params.
+     */
+    private function normaliseQueryParamValue(array $queryParams, string $key): ?string
+    {
+        if (!array_key_exists($key, $queryParams)) {
+            return null;
+        }
+        $value = $queryParams[$key];
+        if (is_array($value) || (!is_scalar($value) && $value !== null)) {
+            return null;
+        }
+        if ($value === null) {
+            return '';
+        }
+        return (string) $value;
     }
 
     /**
