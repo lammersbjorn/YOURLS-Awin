@@ -11,6 +11,16 @@ final class AwinAffiliatePluginTest extends PHPUnit\Framework\TestCase
         $this->assertTrue(class_exists('AwinAffiliatePlugin'));
     }
 
+    public function test_plugin_bootstrap_loads_runtime_class_file(): void
+    {
+        $pluginFile = dirname(__DIR__) . '/plugin.php';
+        $bootstrap = file_get_contents($pluginFile);
+
+        $this->assertIsString($bootstrap);
+        $this->assertStringContainsString("require_once __DIR__ . '/includes/class-awin-affiliate-plugin.php';", $bootstrap);
+        $this->assertStringNotContainsString('class AwinAffiliatePlugin', $bootstrap);
+    }
+
     /**
      * @dataProvider registeredHooksProvider
      */
@@ -54,6 +64,16 @@ final class AwinAffiliatePluginTest extends PHPUnit\Framework\TestCase
         $this->assertArrayHasKey('coolblue', $settings['merchants']);
         $this->assertSame('Coolblue', $settings['merchants']['coolblue']['name']);
         $this->assertContains('coolblue.nl', $settings['merchants']['coolblue']['domains']);
+    }
+
+    public function test_existing_option_name_is_preserved_for_compatibility(): void
+    {
+        yourls_update_option(self::OPTION_NAME, ['merchants' => []]);
+        $this->pluginInstance()->init();
+        $settings = yourls_get_option(self::OPTION_NAME);
+
+        $this->assertIsArray($settings);
+        $this->assertArrayHasKey('merchants', $settings);
     }
 
     public function test_process_url_accepts_yourls_action_args_array_without_output(): void
