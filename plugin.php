@@ -2,7 +2,7 @@
 /**
   * Plugin Name: Awin Affiliate
   * Description: Add your Awin affiliate parameters to URLs from configured merchants
-  * Version: 2.3
+  * Version: 3.0.0
   * Author: Bjorn Lammers
   * Author URI: https://github.com/lammersbjorn/YOURLS-Awin
   * License: MIT
