@@ -5,8 +5,8 @@
   * Version: 2.3
   * Author: Bjorn Lammers
   * Author URI: https://github.com/lammersbjorn/YOURLS-Awin
-  * License: BSD 3-Clause
-  * License URI: https://opensource.org/licenses/BSD-3-Clause
+  * License: MIT
+  * License URI: https://opensource.org/licenses/MIT
   * Requires at least: YOURLS 1.7.3
   * Tested up to: YOURLS 1.10.3
   * Requires PHP: 7.4
