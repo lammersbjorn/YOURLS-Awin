@@ -1,6 +1,6 @@
 # YOURLS Awin Affiliate Plugin
 
-A plugin for YOURLS that automatically adds Awin affiliate parameters to URLs from configured merchants.
+A YOURLS plugin that adds Awin affiliate parameters to URLs from configured merchants.
 
 ## Features
 
@@ -9,6 +9,13 @@ A plugin for YOURLS that automatically adds Awin affiliate parameters to URLs fr
 - Support for multiple merchants with different domains
 - Customizable campaign and clickref parameters
 - Easy-to-use admin interface
+
+## Compatibility
+
+- YOURLS: requires 1.7.3+, tested up to 1.10.3
+- PHP: requires 7.4+, tested up to 8.5
+- Handles both YOURLS redirect hook argument arrays and direct URL strings for older/custom hook callers.
+- Avoids known PHP 8.1+ null/array-to-string warning paths in redirect parameter handling.
 
 ## Installation
 
@@ -31,6 +38,24 @@ When a user clicks a shortened URL that matches a configured merchant domain:
 2. It creates a properly formatted Awin affiliate link
 3. The user is redirected through Awin's tracking system
 4. You earn commission on qualifying purchases
+
+## Testing
+
+Run the lightweight PHPUnit suite:
+
+```bash
+phpunit -c tests/phpunit.xml
+```
+
+For plugin changes, also run:
+
+```bash
+php -l plugin.php
+```
+
+## License
+
+MIT. See [LICENSE](LICENSE).
 
 ## Support
 
