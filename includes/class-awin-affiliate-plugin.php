@@ -465,10 +465,13 @@ class AwinAffiliatePlugin
     private function buildBaseUrl(array $urlParts): string
     {
         $scheme = $urlParts['scheme'] ?? 'https';
-        $host = $urlParts['host'];
-        $path = $urlParts['path'] ?? '';
+        $host = (string) ($urlParts['host'] ?? '');
+        $port = isset($urlParts['port']) ? ':' . (string) $urlParts['port'] : '';
+        $path = (string) ($urlParts['path'] ?? '');
+        $query = isset($urlParts['query']) ? '?' . (string) $urlParts['query'] : '';
+        $fragment = isset($urlParts['fragment']) ? '#' . (string) $urlParts['fragment'] : '';
 
-        return sprintf('%s://%s%s', $scheme, $host, $path);
+        return sprintf('%s://%s%s%s%s', $scheme, $host . $port, $path, $query, $fragment);
     }
 
     private function normaliseQueryParamValue(array $queryParams, string $key): ?string
