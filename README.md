@@ -70,7 +70,19 @@ MIT. See [LICENSE](LICENSE).
 
 GitHub Actions includes release automation in `.github/workflows/release.yml`.
 
-- **Stable release:** run the **Release** workflow manually and choose `minor` or `major`. The workflow bumps `plugin.php` version, commits it to `main`, tags `vX.Y.0`, builds an install zip, and creates a GitHub Release.
-- **Alpha release:** every non-bot push to `main` creates a prerelease tagged `alpha-<run>-<attempt>-<sha>` with an install zip.
+- **Stable release:** run the **Release** workflow manually and choose `minor` or `major`. You can provide release notes in the workflow input, or leave it blank for GitHub generated notes. The workflow bumps `plugin.php` version, commits it to `main`, tags `vX.Y.0`, builds an install zip, and creates a GitHub Release.
+- **Alpha release:** every non-bot push to `main` creates a prerelease tagged `alpha-<run>-<attempt>-<sha>` with an install zip and generated notes.
 
 Release zips exclude development-only files such as `.github/`, `dev/`, `scripts/`, `tests/`, and `test-suite/`.
+
+Suggested release notes for the current v3 line:
+
+```markdown
+## YOURLS Awin
+
+### Changed
+- Split the YOURLS plugin bootstrap from runtime code.
+- Preserved existing `awin_affiliate_settings` compatibility.
+- Added local Docker-based YOURLS development setup.
+- Added install zip packaging through release automation.
+```
